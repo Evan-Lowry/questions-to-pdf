@@ -123,6 +123,7 @@ class MainWindow(QMainWindow):
         """Initialize the user interface."""
         self.setWindowTitle("Worksheet Generator")
         self.setGeometry(100, 100, 700, 600)
+        self.setFixedSize(700, 600)
         
         # Set window background
         self.setStyleSheet("""
@@ -168,16 +169,16 @@ class MainWindow(QMainWindow):
         self.drop_area.setMinimumHeight(350)
         drop_layout.addWidget(self.drop_area)
         
-        # Status label (hidden by default)
+        # Status label – always present and fixed height so the layout never shifts
         self.status_label = QLabel("")
         self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setFixedHeight(36)
+        self.status_label.setWordWrap(False)
         self.status_label.setStyleSheet("""
-            font-size: 14px;
+            font-size: 13px;
             color: #4A90E2;
-            padding: 10px;
-            margin-top: 10px;
+            padding: 4px 10px;
         """)
-        self.status_label.hide()
         drop_layout.addWidget(self.status_label)
         
         main_layout.addWidget(drop_container)
@@ -227,42 +228,35 @@ class MainWindow(QMainWindow):
         """Process the uploaded PDF file."""
         try:
             self.input_pdf_path = file_path
-            
+
             # Extract questions
             summaries = self.pdf_generator.extract_questions_from_pdf(file_path)
-            
-            # Get file name
+
             file_name = os.path.basename(file_path)
-            
-            # Show success status
+
             if self.pdf_generator.sections:
                 num_sections = len(self.pdf_generator.sections)
-                section_list = "\n".join(f"  • {s}" for s in summaries)
+                total_questions = sum(s['question_count'] for s in self.pdf_generator.sections)
                 self.status_label.setText(
-                    f"✓ {file_name}\n"
-                    f"Found {num_sections} section(s):\n{section_list}"
+                    f"✓  {file_name}  —  {num_sections} section(s), {total_questions} question(s) found"
                 )
                 self.status_label.setStyleSheet("""
                     font-size: 13px;
                     color: #28a745;
-                    padding: 10px;
-                    margin-top: 10px;
+                    padding: 4px 10px;
                 """)
-                self.status_label.show()
                 self.generate_btn.show()
             else:
                 self.status_label.setText(
-                    f"✗ No pages with 'Section X.Y Problems' found in {file_name}"
+                    f"✗  No 'Section X.Y Problems' found in {file_name}"
                 )
                 self.status_label.setStyleSheet("""
-                    font-size: 14px;
+                    font-size: 13px;
                     color: #dc3545;
-                    padding: 10px;
-                    margin-top: 10px;
+                    padding: 4px 10px;
                 """)
-                self.status_label.show()
                 self.generate_btn.hide()
-                
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error processing PDF:\n{str(e)}")
     
@@ -286,12 +280,11 @@ class MainWindow(QMainWindow):
         try:
             # Disable button during generation
             self.generate_btn.setEnabled(False)
-            self.status_label.setText("⏳ Generating worksheet...")
+            self.status_label.setText("⏳  Generating worksheet…")
             self.status_label.setStyleSheet("""
-                font-size: 14px;
+                font-size: 13px;
                 color: #4A90E2;
-                padding: 10px;
-                margin-top: 10px;
+                padding: 4px 10px;
             """)
             
             # Generate PDF
@@ -304,23 +297,20 @@ class MainWindow(QMainWindow):
                 f"Worksheet generated successfully!\n\nSaved to:\n{output_path}"
             )
             
-            # Reset
-            self.status_label.setText("✓ Worksheet generated successfully!")
+            self.status_label.setText("✓  Worksheet generated successfully!")
             self.status_label.setStyleSheet("""
-                font-size: 14px;
+                font-size: 13px;
                 color: #28a745;
-                padding: 10px;
-                margin-top: 10px;
+                padding: 4px 10px;
             """)
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error generating worksheet:\n{str(e)}")
-            self.status_label.setText("✗ Error generating worksheet")
+            self.status_label.setText("✗  Error generating worksheet")
             self.status_label.setStyleSheet("""
-                font-size: 14px;
+                font-size: 13px;
                 color: #dc3545;
-                padding: 10px;
-                margin-top: 10px;
+                padding: 4px 10px;
             """)
         finally:
             self.generate_btn.setEnabled(True)

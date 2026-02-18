@@ -72,7 +72,6 @@ python3 src/main.py
 
 - **[INSTALLATION.md](INSTALLATION.md)** - Complete installation guide with LaTeX setup
 - **[QUICK_START.md](QUICK_START.md)** - Step-by-step usage instructions
-- **[UPDATE_SUMMARY.md](UPDATE_SUMMARY.md)** - Details on LaTeX implementation and changes
 - **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
 
 ## 💡 Example
@@ -129,20 +128,15 @@ Section 2.2 Problems
 math-worksheet-generator/
 ├── src/
 │   ├── main.py              # Application entry point
-│   ├── pdf_generator.py     # Question extraction & LaTeX generation
-│   ├── gui/
-│   │   ├── main_window.py   # GUI implementation
-│   │   ├── components.py    # Reusable components
-│   │   └── __init__.py
-│   └── utils/
-│       ├── formatting.py    # Text utilities
+│   ├── pdf_generator.py     # Question extraction & PDF generation
+│   └── gui/
+│       ├── main_window.py   # GUI implementation
 │       └── __init__.py
 ├── requirements.txt         # Python dependencies
-├── run.sh                  # Launch script
-├── INSTALLATION.md         # Setup guide
-├── QUICK_START.md         # Usage guide
-├── UPDATE_SUMMARY.md      # Recent changes
-└── README.md              # This file
+├── run.sh                   # Launch script
+├── INSTALLATION.md          # Setup guide
+├── QUICK_START.md           # Usage guide
+└── README.md                # This file
 ```
 
 ## 🤝 Contributing

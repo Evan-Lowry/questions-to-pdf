@@ -119,57 +119,133 @@ class PDFGenerator:
             raise Exception(f"Error extracting questions: {str(e)}")
 
     # ------------------------------------------------------------------
+    # Spacing constants
+    ANSWER_SPACE_PT = 198   # ~2.75 inches of blank answer space after each question region
+    SECTION_GAP_PT  = 28    # extra gap between sections
+    PAGE_MARGIN_PT  = 36    # top/bottom margin when slicing into pages
+
     def generate_worksheet_pdf(self, output_path, title="Math Worksheet"):
         """
-        Build a worksheet by cropping question regions from the original PDF
-        and inserting blank space after each question.
+        Build a worksheet PDF with a two-phase approach:
+
+        Phase 1 – Assemble one tall "scroll" page that contains every
+                  question region (cropped from the source PDF) separated
+                  by blank answer space.
+
+        Phase 2 – Slice that scroll into standard letter-sized pages and
+                  write the final multi-page PDF.
         """
         if not self.pdf_path or not self.sections:
             raise Exception("No questions to generate. Please extract questions first.")
 
         try:
             reader = PdfReader(self.pdf_path)
-            writer = PdfWriter()
 
-            for sec in self.sections:
+            # Derive page dimensions from the first source page
+            ref_page   = reader.pages[self.sections[0]['start_page']]
+            PAGE_W     = float(ref_page.mediabox.width)   # e.g. 612 pt (letter)
+            PAGE_H     = float(ref_page.mediabox.height)  # e.g. 792 pt (letter)
+
+            # ----------------------------------------------------------
+            # Phase 1: collect (cropped_page_obj, strip_height) pairs
+            #          and compute the total scroll height.
+            # ----------------------------------------------------------
+            strips = []   # list of (PyPDF2 page object, strip_height_pt)
+
+            for sec_idx, sec in enumerate(self.sections):
                 for pg_idx in range(sec['start_page'], sec['end_page'] + 1):
-                    original = reader.pages[pg_idx]
+                    original    = reader.pages[pg_idx]
                     page_height = float(original.mediabox.height)
-                    page_width = float(original.mediabox.width)
 
-                    # Determine crop boundaries (in PDF coords: 0 = bottom)
-                    # pdfplumber y is from top; PDF mediabox y is from bottom
+                    # --- crop bounds in pdfplumber (top-down) coords ---
                     if pg_idx == sec['start_page']:
-                        crop_top_plumber = max(sec['start_y'] - 10, 0)  # a little above header
+                        crop_top = max(sec['start_y'] - 10, 0)
                     else:
-                        crop_top_plumber = 50  # skip header
+                        crop_top = 50   # skip running header
 
                     if pg_idx == sec['end_page']:
-                        crop_bottom_plumber = min(sec['end_y'], page_height)
+                        crop_bot = min(sec['end_y'], page_height)
                     else:
-                        crop_bottom_plumber = page_height - 40  # skip footer
+                        crop_bot = page_height - 40   # skip running footer
 
-                    # Convert pdfplumber coords (top-down) to PDF coords (bottom-up)
-                    pdf_lower_y = page_height - crop_bottom_plumber
-                    pdf_upper_y = page_height - crop_top_plumber
+                    strip_h = crop_bot - crop_top
+                    if strip_h <= 0:
+                        continue
 
-                    # Create a cropped copy of the page
+                    # Convert to PDF (bottom-up) coordinates
+                    pdf_lower = page_height - crop_bot
+                    pdf_upper = page_height - crop_top
+
                     cropped = copy.copy(original)
-                    cropped.mediabox = RectangleObject([
-                        0,                # left
-                        pdf_lower_y,      # bottom
-                        page_width,       # right
-                        pdf_upper_y,      # top
-                    ])
+                    cropped.mediabox = RectangleObject([0, pdf_lower, PAGE_W, pdf_upper])
+                    strips.append((cropped, strip_h))
 
-                    writer.add_page(cropped)
+                # After every section add an answer-space marker (None = blank gap)
+                strips.append((None, self.ANSWER_SPACE_PT))
 
-                # Add a blank page after each section for answer space
-                ref_page = reader.pages[sec['start_page']]
-                writer.add_blank_page(
-                    width=float(ref_page.mediabox.width),
-                    height=float(ref_page.mediabox.height),
-                )
+                # Extra visual gap between sections (except after the last one)
+                if sec_idx < len(self.sections) - 1:
+                    strips.append((None, self.SECTION_GAP_PT))
+
+            # ----------------------------------------------------------
+            # Phase 2: slice the scroll into letter pages.
+            #
+            # Strategy: walk through strips top-to-bottom.  Each strip is
+            # either a real cropped page or a blank gap.  Accumulate content
+            # onto the current output page; when a strip would overflow, emit
+            # the current page and start a new one.
+            # ----------------------------------------------------------
+            writer = PdfWriter()
+
+            usable_h   = PAGE_H - 2 * self.PAGE_MARGIN_PT
+            cursor_y   = usable_h   # remaining space on current output page
+            cur_page_h = 0          # how much of usable_h has been consumed
+
+            def flush_page(pending_strips, total_h):
+                """Create one output page from the accumulated pending strips."""
+                out_page = writer.add_blank_page(width=PAGE_W, height=PAGE_H)
+                for (strip, sh, dest_y_bot) in pending_strips:
+                    if strip is None:
+                        continue  # blank gap – nothing to draw
+                    # Merge the cropped strip onto out_page at the right y-offset.
+                    # PyPDF2's merge_page uses a transformation matrix.
+                    # We need to translate the strip so its bottom lands at dest_y_bot.
+                    # The strip's own coordinate system starts at pdf_lower (already 0
+                    # after cropping sets mediabox lower = pdf_lower, but the content
+                    # stream still uses original coords).
+                    # Use mergeTransformedPage with a vertical translation.
+                    strip_mb_bottom = float(strip.mediabox.lower_left[1])
+                    tx = self.PAGE_MARGIN_PT   # left margin indent (same as source)
+                    ty = dest_y_bot - strip_mb_bottom
+                    out_page.mergeTransformedPage(strip, [1, 0, 0, 1, tx, ty])
+
+            y_bottom = PAGE_H - self.PAGE_MARGIN_PT  # current top-of-page in PDF coords (from bottom)
+            page_strips = []
+
+            for (strip, sh) in strips:
+                if sh > usable_h:
+                    # Strip is taller than a full page – scale it down by splitting
+                    # at page boundaries (rare edge case: just let it overflow for now)
+                    sh = usable_h
+
+                if sh > cursor_y:
+                    # Flush current page
+                    flush_page(page_strips, cur_page_h)
+                    # Start new page
+                    cursor_y   = usable_h
+                    y_bottom   = PAGE_H - self.PAGE_MARGIN_PT
+                    page_strips = []
+                    cur_page_h  = 0
+
+                dest_y_bot = y_bottom - sh
+                page_strips.append((strip, sh, dest_y_bot))
+                y_bottom   -= sh
+                cursor_y   -= sh
+                cur_page_h += sh
+
+            # Flush the last (possibly partial) page
+            if page_strips:
+                flush_page(page_strips, cur_page_h)
 
             with open(output_path, 'wb') as f:
                 writer.write(f)
