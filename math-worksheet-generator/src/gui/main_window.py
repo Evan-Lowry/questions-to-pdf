@@ -15,30 +15,32 @@ class DropArea(QWidget):
         self.parent_window = parent
         self.setAcceptDrops(True)
         self.init_ui()
-        
+
     def init_ui(self):
-        layout = QVBoxLayout()
-        layout.setSpacing(20)
-        
-        # Upload icon (using emoji)
-        icon_label = QLabel("📁")
+        self.stack_layout = QVBoxLayout()
+        self.stack_layout.setContentsMargins(20, 20, 20, 20)
+        self.stack_layout.setSpacing(0)
+
+        # --- Empty state ---
+        self.empty_widget = QWidget()
+        empty_layout = QVBoxLayout()
+        empty_layout.setSpacing(14)
+
+        icon_label = QLabel("�")
         icon_label.setAlignment(Qt.AlignCenter)
-        icon_label.setStyleSheet("font-size: 64px;")
-        layout.addWidget(icon_label)
-        
-        # Main text
-        text_label = QLabel("Drag files to upload")
+        icon_label.setStyleSheet("font-size: 56px; background: transparent;")
+        empty_layout.addWidget(icon_label)
+
+        text_label = QLabel("Drag a PDF here to upload")
         text_label.setAlignment(Qt.AlignCenter)
-        text_label.setStyleSheet("font-size: 20px; font-weight: 600; color: #1a1a1a;")
-        layout.addWidget(text_label)
-        
-        # Or text
+        text_label.setStyleSheet("font-size: 18px; font-weight: 600; color: #1a1a1a; background: transparent;")
+        empty_layout.addWidget(text_label)
+
         or_label = QLabel("or")
         or_label.setAlignment(Qt.AlignCenter)
-        or_label.setStyleSheet("font-size: 14px; color: #999;")
-        layout.addWidget(or_label)
-        
-        # Browse button
+        or_label.setStyleSheet("font-size: 13px; color: #999; background: transparent;")
+        empty_layout.addWidget(or_label)
+
         self.browse_btn = QPushButton("Browse Files")
         self.browse_btn.setStyleSheet("""
             QPushButton {
@@ -50,27 +52,107 @@ class DropArea(QWidget):
                 font-size: 14px;
                 font-weight: 600;
             }
-            QPushButton:hover {
-                background-color: #357ABD;
-            }
-            QPushButton:pressed {
-                background-color: #2D6BA3;
-            }
+            QPushButton:hover { background-color: #357ABD; }
+            QPushButton:pressed { background-color: #2D6BA3; }
         """)
         self.browse_btn.setCursor(Qt.PointingHandCursor)
         self.browse_btn.clicked.connect(self.parent_window.browse_file)
-        layout.addWidget(self.browse_btn, alignment=Qt.AlignCenter)
-        
-        # Supported formats
+        empty_layout.addWidget(self.browse_btn, alignment=Qt.AlignCenter)
+
         formats_label = QLabel("Supported formats: PDF")
         formats_label.setAlignment(Qt.AlignCenter)
-        formats_label.setStyleSheet("font-size: 12px; color: #999; margin-top: 10px;")
-        layout.addWidget(formats_label)
-        
-        layout.addStretch()
-        self.setLayout(layout)
-        
-        # Styling
+        formats_label.setStyleSheet("font-size: 12px; color: #bbb; background: transparent;")
+        empty_layout.addWidget(formats_label)
+
+        empty_layout.addStretch()
+        self.empty_widget.setLayout(empty_layout)
+
+        # --- Loaded state ---
+        self.loaded_widget = QWidget()
+        loaded_layout = QVBoxLayout()
+        loaded_layout.setSpacing(14)
+        loaded_layout.addStretch()
+
+        self.file_icon_label = QLabel("✅")
+        self.file_icon_label.setAlignment(Qt.AlignCenter)
+        self.file_icon_label.setStyleSheet("font-size: 52px; background: transparent;")
+        loaded_layout.addWidget(self.file_icon_label)
+
+        self.file_name_label = QLabel("")
+        self.file_name_label.setAlignment(Qt.AlignCenter)
+        self.file_name_label.setStyleSheet("font-size: 17px; font-weight: 700; color: #1a1a1a; background: transparent;")
+        self.file_name_label.setWordWrap(True)
+        loaded_layout.addWidget(self.file_name_label)
+
+        self.file_sub_label = QLabel("")
+        self.file_sub_label.setAlignment(Qt.AlignCenter)
+        self.file_sub_label.setStyleSheet("font-size: 13px; color: #555; background: transparent;")
+        loaded_layout.addWidget(self.file_sub_label)
+
+        change_btn = QPushButton("Change File")
+        change_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #4A90E2;
+                border: 2px solid #4A90E2;
+                border-radius: 16px;
+                padding: 7px 24px;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            QPushButton:hover { background-color: #eef4fd; }
+        """)
+        change_btn.setCursor(Qt.PointingHandCursor)
+        change_btn.clicked.connect(self.parent_window.browse_file)
+        loaded_layout.addWidget(change_btn, alignment=Qt.AlignCenter)
+
+        loaded_layout.addStretch()
+        self.loaded_widget.setLayout(loaded_layout)
+        self.loaded_widget.hide()
+
+        self.stack_layout.addWidget(self.empty_widget)
+        self.stack_layout.addWidget(self.loaded_widget)
+        self.setLayout(self.stack_layout)
+
+        self._set_idle_style()
+
+    def show_loaded(self, file_name, subtitle=""):
+        """Switch the drop area to the loaded state."""
+        self.file_name_label.setText(file_name)
+        self.file_sub_label.setText(subtitle)
+        self.empty_widget.hide()
+        self.loaded_widget.show()
+        self.setStyleSheet("""
+            DropArea {
+                background-color: #f0fff4;
+                border: 2px solid #28a745;
+                border-radius: 10px;
+            }
+        """)
+
+    def show_error(self, file_name, subtitle=""):
+        """Switch the drop area to an error state."""
+        self.file_icon_label.setText("❌")
+        self.file_name_label.setText(file_name)
+        self.file_sub_label.setText(subtitle)
+        self.empty_widget.hide()
+        self.loaded_widget.show()
+        self.setStyleSheet("""
+            DropArea {
+                background-color: #fff5f5;
+                border: 2px solid #dc3545;
+                border-radius: 10px;
+            }
+        """)
+
+    def reset(self):
+        """Switch back to the empty/idle state."""
+        self.file_icon_label.setText("✅")
+        self.loaded_widget.hide()
+        self.empty_widget.show()
+        self._set_idle_style()
+
+    def _set_idle_style(self):
         self.setStyleSheet("""
             DropArea {
                 background-color: white;
