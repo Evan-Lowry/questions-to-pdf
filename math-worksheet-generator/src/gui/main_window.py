@@ -171,27 +171,16 @@ class DropArea(QWidget):
                     border-radius: 10px;
                 }
             """)
-    
+
     def dragLeaveEvent(self, event):
-        self.setStyleSheet("""
-            DropArea {
-                background-color: white;
-                border: 2px dashed #d0d0d0;
-                border-radius: 10px;
-            }
-        """)
-    
+        self._set_idle_style()
+
     def dropEvent(self, event: QDropEvent):
         files = [u.toLocalFile() for u in event.mimeData().urls()]
         if files and files[0].lower().endswith('.pdf'):
             self.parent_window.process_file(files[0])
-        self.setStyleSheet("""
-            DropArea {
-                background-color: white;
-                border: 2px dashed #d0d0d0;
-                border-radius: 10px;
-            }
-        """)
+        else:
+            self._set_idle_style()
 
 
 class MainWindow(QMainWindow):
@@ -310,33 +299,19 @@ class MainWindow(QMainWindow):
         """Process the uploaded PDF file."""
         try:
             self.input_pdf_path = file_path
-
-            # Extract questions
             summaries = self.pdf_generator.extract_questions_from_pdf(file_path)
-
             file_name = os.path.basename(file_path)
 
             if self.pdf_generator.sections:
                 num_sections = len(self.pdf_generator.sections)
                 total_questions = sum(s['question_count'] for s in self.pdf_generator.sections)
-                self.status_label.setText(
-                    f"✓  {file_name}  —  {num_sections} section(s), {total_questions} question(s) found"
-                )
-                self.status_label.setStyleSheet("""
-                    font-size: 13px;
-                    color: #28a745;
-                    padding: 4px 10px;
-                """)
+                subtitle = f"{num_sections} section(s)  ·  {total_questions} question(s) found"
+                self.drop_area.show_loaded(file_name, subtitle)
+                self.status_label.setText("")
                 self.generate_btn.show()
             else:
-                self.status_label.setText(
-                    f"✗  No 'Section X.Y Problems' found in {file_name}"
-                )
-                self.status_label.setStyleSheet("""
-                    font-size: 13px;
-                    color: #dc3545;
-                    padding: 4px 10px;
-                """)
+                self.drop_area.show_error(file_name, "No 'Section X.Y Problems' found")
+                self.status_label.setText("")
                 self.generate_btn.hide()
 
         except Exception as e:
